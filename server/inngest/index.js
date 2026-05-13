@@ -1,68 +1,62 @@
 import { Inngest } from "inngest";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../configs/prisma.js"; // Tumhara configured prisma.js use karo
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "project-management" });
 
-//Inngest function to save user data to the database when a user is created in Clerk
+// Inngest function to save user data to the database when a user is created in Clerk
 const syncUserCreation = inngest.createFunction(
-  {id: 'sync-user-from-clerk'},
+  { id: 'sync-user-from-clerk' },
   { event: "clerk/user.created" },
   async ({ event, step }) => {
-    const {data} = event;
+    const { data } = event;
     await prisma.user.create({
-      data:{
+      data: {
         id: data.id,
         email: data?.email_addresses[0]?.email_address,
-        name: data?.first_name + " " + data?.last_name,
+        name: (data?.first_name || "") + " " + (data?.last_name || ""),
         image: data?.image_url,
       }
     })
   }
 )
 
-
-//Inngest function to delete user data from the database when a user is deleted in Clerk
+// Inngest function to delete user data from the database when a user is deleted in Clerk
 const syncUserDeletion = inngest.createFunction(
-  {id: 'delete-user-from-clerk'},
+  { id: 'delete-user-from-clerk' },
   { event: "clerk/user.deleted" },
   async ({ event, step }) => {
-    const {data} = event;
+    const { data } = event;
     await prisma.user.delete({
-      where:{
+      where: {
         id: data.id
       }
     })
-      }
+  }
 )
 
-
-//Inngest function to update user data in the database when a user is updated in Clerk
+// Inngest function to update user data in the database when a user is updated in Clerk
 const syncUserUpdation = inngest.createFunction(
-  {id: 'update-user-from-clerk'},
+  { id: 'update-user-from-clerk' },
   { event: "clerk/user.updated" },
   async ({ event, step }) => {
-    const {data} = event;
+    const { data } = event;
     await prisma.user.update({
-      where:{
-         id: data.id
+      where: {
+        id: data.id
       },
-      data:{
+      data: {
         email: data?.email_addresses[0]?.email_address,
-        name: data?.first_name + " " + data?.last_name,
+        name: (data?.first_name || "") + " " + (data?.last_name || ""),
         image: data?.image_url,
       }
     })
   }
 )
 
-
-// Create an empty array where we'll export future Inngest functions
+// Exporting the functions array for server.js
 export const functions = [
   syncUserCreation,
   syncUserDeletion,
   syncUserUpdation
 ];
-// updated

@@ -13,8 +13,14 @@ app.use(clerkMiddleware());
 
 app.get('/', (req,res) => res.send('Server is live!'));
 
-// Set up the "/api/inngest" (recommended) routes with the serve handler
+// Inngest route
 app.use("/api/inngest", serve({ client: inngest, functions }));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+// Port management (Local development ke liye)
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+}
+
+// Vercel ke liye export zaroori hai
+export default app;
