@@ -65,7 +65,7 @@ const syncUserUpdation = inngest.createFunction(
   }
 );
 
-//Inngest function to save  workspace data to database
+// Inngest function to save workspace data to database
 const saveWorkspaceData = inngest.createFunction(
   {
     id: "sync-workspace-from-clerk",
@@ -74,6 +74,32 @@ const saveWorkspaceData = inngest.createFunction(
 
   async ({ event }) => {
     const { data } = event;
+
+    console.log("ORG CREATED:", data);
+
+    // Check if owner user exists
+    const user = await prisma.user.findUnique({
+      where: {
+        id: data.created_by,
+      },
+    });
+
+    if (!user) {
+      console.log("User not found:", data.created_by);
+      return;
+    }
+
+    // Prevent duplicate workspace
+    const existingWorkspace = await prisma.workspace.findUnique({
+      where: {
+        id: data.id,
+      },
+    });
+
+    if (existingWorkspace) {
+      console.log("Workspace already exists");
+      return;
+    }
 
     await prisma.workspace.create({
       data: {
@@ -85,36 +111,51 @@ const saveWorkspaceData = inngest.createFunction(
       },
     });
 
+    console.log("Workspace created");
+
     await prisma.workspaceMember.create({
       data: {
         userId: data.created_by,
         workspaceId: data.id,
         role: "ADMIN",
       },
-    })
-  }
-)
-    //Inngest function to update workspace data in database
-    const syncWorkspaceUpdation = inngest.createFunction(
-        {
-          id: "update-workspace-from-clerk",
-          triggers: [{ event: "clerk/organization.updated" }]
-        },
-         async ({ event }) => {
-          const { data } = event;
-          await prisma.workspace.update({
-            where: {
-              id: data.id
-            },
-            data: {
-              name:data.name, 
-              slug: data.slug,
-              image_url: data.image_url,
-            }
-          })
-         }
+    });
 
-    ) 
+    console.log("Workspace member created");
+  }
+);
+    const syncWorkspaceUpdation = inngest.createFunction(
+{
+  id: "update-workspace-from-clerk",
+  triggers: [{ event: "clerk/organization.updated" }]
+},
+
+async ({ event }) => {
+  const { data } = event;
+
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: data.id }
+  });
+
+  if (!workspace) {
+    console.log("Workspace not found");
+    return;
+  }
+
+  await prisma.workspace.update({
+    where: {
+      id: data.id
+    },
+    data: {
+      name: data.name,
+      slug: data.slug,
+      image_url: data.image_url,
+    }
+  });
+
+  console.log("Workspace updated");
+}
+)
     //Inngest function to delete workspace data from database
     const syncWorkspaceDeletion = inngest.createFunction(
       {
