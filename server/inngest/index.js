@@ -292,14 +292,15 @@ const sendTaskAssignmentEmail = inngest.createFunction(
     });
 
     if (
-     new Date(assignedTask.due_date).toLocaleDateString() !==
-     new Date().toLocaleDateString()
-    )
-
-  await step.sleepUntil(
-    "wait-for-the-due-date",
-    new Date(task.due_date)
-  );
+  new Date(assignedTask.due_date).toLocaleDateString() !==
+  new Date().toLocaleDateString()
+   ) 
+   {
+    await step.sleepUntil(
+     "wait-for-the-due-date",
+     new Date(assignedTask.due_date)
+    );
+   }
 
   await step.run("check-if-task-is-completed", async () => {
 
