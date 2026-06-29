@@ -7,6 +7,7 @@ import ProjectSettings from "../components/ProjectSettings";
 import CreateTaskDialog from "../components/CreateTaskDialog";
 import ProjectCalendar from "../components/ProjectCalendar";
 import ProjectTasks from "../components/ProjectTasks";
+import { useUser } from "@clerk/clerk-react";
 
 export default function ProjectDetail() {
 
@@ -14,11 +15,19 @@ export default function ProjectDetail() {
     const tab = searchParams.get('tab');
     const id = searchParams.get('id');
 
+    const { user } = useUser();
     const navigate = useNavigate();
-    const projects = useSelector((state) => state?.workspace?.currentWorkspace?.projects || []);
+    const currentWorkspace = useSelector((state) => state?.workspace?.currentWorkspace || null);
+    const projects = currentWorkspace?.projects || [];
 
     const [project, setProject] = useState(null);
     const [tasks, setTasks] = useState([]);
+
+    const isWorkspaceAdmin = currentWorkspace?.members?.some(
+        (m) => m.userId === user?.id && m.role === "ADMIN"
+    );
+    const isTeamLead = project?.team_lead === user?.id;
+    const canCreateTask = isWorkspaceAdmin || isTeamLead;
     const [showCreateTask, setShowCreateTask] = useState(false);
     const [activeTab, setActiveTab] = useState(tab || "tasks");
 
@@ -68,10 +77,12 @@ export default function ProjectDetail() {
                         </span>
                     </div>
                 </div>
-                <button onClick={() => setShowCreateTask(true)} className="flex items-center gap-2 px-5 py-2 text-sm rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white" >
-                    <PlusIcon className="size-4" />
-                    New Task
-                </button>
+                {canCreateTask && (
+                    <button onClick={() => setShowCreateTask(true)} className="flex items-center gap-2 px-5 py-2 text-sm rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white" >
+                        <PlusIcon className="size-4" />
+                        New Task
+                    </button>
+                )}
             </div>
 
             {/* Info Cards */}
@@ -111,7 +122,7 @@ export default function ProjectDetail() {
                 <div className="mt-6">
                     {activeTab === "tasks" && (
                         <div className=" dark:bg-zinc-900/40 rounded max-w-6xl">
-                            <ProjectTasks tasks={tasks} />
+                            <ProjectTasks tasks={tasks} members={project?.members || []} />
                         </div>
                     )}
                     {activeTab === "analytics" && (

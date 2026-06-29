@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { format, isSameDay, isBefore, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths } from "date-fns";
 import { CalendarIcon, Clock, User, ChevronLeft, ChevronRight } from "lucide-react";
+import api from "../configs/api";
+import { useDispatch } from "react-redux";
+import { updateTask } from "../features/workspaceSlice";
+import toast from "react-hot-toast";
+import { useAuth } from "@clerk/clerk-react";
 
 const typeColors = {
     BUG: "bg-red-200 text-red-800 dark:bg-red-500 dark:text-red-900",
@@ -19,6 +24,40 @@ const priorityBorders = {
 const ProjectCalendar = ({ tasks }) => {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [currentMonth, setCurrentMonth] = useState(new Date());
+    const dispatch = useDispatch();
+    const { getToken } = useAuth();
+    const [draggedOverDate, setDraggedOverDate] = useState(null);
+
+    const handleDragStart = (e, taskId) => {
+        e.dataTransfer.setData("taskId", taskId);
+    };
+
+    const handleTaskDrop = async (e, date) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData("taskId");
+        if (!taskId) return;
+
+        toast.loading("Rescheduling task...");
+        try {
+            const token = await getToken();
+            const { data } = await api.put(
+                `/api/tasks/${taskId}`,
+                { due_date: date },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            dispatch(updateTask(data.task));
+            toast.dismissAll();
+            toast.success("Task rescheduled successfully!");
+        } catch (error) {
+            toast.dismissAll();
+            toast.error(error.response?.data?.message || "Failed to reschedule task");
+        }
+    };
 
     const today = new Date();
     const getTasksForDate = (date) => tasks.filter((task) => isSameDay(task.due_date, date));
@@ -71,14 +110,20 @@ const ProjectCalendar = ({ tasks }) => {
                             const dayTasks = getTasksForDate(day);
                             const isSelected = isSameDay(day, selectedDate);
                             const hasOverdue = dayTasks.some((t) => t.status !== "DONE" && isBefore(t.due_date, today));
+                            const isDraggedOver = draggedOverDate && isSameDay(day, draggedOverDate);
 
                             return (
                                 <button
                                     key={day}
                                     onClick={() => setSelectedDate(day)}
-                                    className={`sm:h-14 rounded-md flex flex-col items-center justify-center text-sm
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDragEnter={(e) => { e.preventDefault(); setDraggedOverDate(day); }}
+                                    onDragLeave={() => setDraggedOverDate(null)}
+                                    onDrop={(e) => { setDraggedOverDate(null); handleTaskDrop(e, day); }}
+                                    className={`sm:h-14 rounded-md flex flex-col items-center justify-center text-sm transition-all duration-200
                                     ${isSelected ? "bg-blue-200 text-blue-900 dark:bg-blue-600 dark:text-white" : "bg-zinc-50 text-zinc-900 dark:bg-zinc-800/40 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"}
-                                    ${hasOverdue ? "border border-red-300 dark:border-red-500" : ""}`}
+                                    ${hasOverdue ? "border border-red-300 dark:border-red-500" : ""}
+                                    ${isDraggedOver ? "ring-2 ring-dashed ring-blue-500 bg-blue-50 dark:bg-blue-950/20 scale-[1.03]" : ""}`}
                                 >
                                     <span>{format(day, "d")}</span>
                                     {dayTasks.length > 0 && (
@@ -100,7 +145,9 @@ const ProjectCalendar = ({ tasks }) => {
                             {getTasksForDate(selectedDate).map((task) => (
                                 <div
                                     key={task.id}
-                                    className={`bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition p-4 rounded border-l-4 ${priorityBorders[task.priority]}`}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, task.id)}
+                                    className={`bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-grab active:cursor-grabbing transition p-4 rounded border-l-4 ${priorityBorders[task.priority]}`}
                                 >
                                     <div className="flex justify-between mb-2">
                                         <h4 className="text-zinc-900 dark:text-white font-medium">{task.title}</h4>
@@ -138,7 +185,9 @@ const ProjectCalendar = ({ tasks }) => {
                             {upcomingTasks.map((task) => (
                                 <div
                                     key={task.id}
-                                    className="bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-3 rounded-lg transition"
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, task.id)}
+                                    className="bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-grab active:cursor-grabbing p-3 rounded-lg transition"
                                 >
                                     <div className="flex justify-between items-start text-sm">
                                         <span className="text-zinc-900 dark:text-white">{task.title}</span>
@@ -161,7 +210,12 @@ const ProjectCalendar = ({ tasks }) => {
                         </h3>
                         <div className="space-y-2">
                             {overdueTasks.slice(0, 5).map((task) => (
-                                <div key={task.id} className="bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 p-3 rounded-lg transition" >
+                                <div 
+                                    key={task.id} 
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, task.id)}
+                                    className="bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 cursor-grab active:cursor-grabbing p-3 rounded-lg transition" 
+                                >
                                     <div className="flex justify-between text-sm text-zinc-900 dark:text-white">
                                         <span>{task.title}</span>
                                         <span className="text-xs px-2 py-0.5 rounded bg-red-200 dark:bg-red-500 text-red-900 dark:text-red-900">

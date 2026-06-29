@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Mail, UserPlus } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
+import { useAuth } from "@clerk/clerk-react";
+import api from "../configs/api";
+import { fetchWorkspaces } from "../features/workspaceSlice";
+import toast from "react-hot-toast";
 
 const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
 
@@ -9,6 +13,8 @@ const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
 
     const id = searchParams.get('id');
 
+    const { getToken } = useAuth();
+    const dispatch = useDispatch();
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
 
     const project = currentWorkspace?.projects.find((p) => p.id === id);
@@ -19,10 +25,23 @@ const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+        setIsAdding(true)
+        try {
+            toast.loading("Adding member...")
+            await api.post(`/api/projects/${project.id}/addMember`, { email }, { headers: { Authorization: `Bearer ${await getToken()}` } })
+            toast.dismiss();
+            toast.success("Member added successfully")
+            setIsDialogOpen(false)
+            dispatch(fetchWorkspaces({ getToken }))
+        } catch (error) {
+            toast.dismiss();
+            toast.error(error.response?.data?.message || error.message)
+        } finally {
+            setIsAdding(false)
+        }
     };
 
-    if (!isDialogOpen) return null;
+    if (!isDialogOpen || !project) return null;
 
     return (
         <div className="fixed inset-0 bg-black/20 dark:bg-black/50 backdrop-blur flex items-center justify-center z-50">

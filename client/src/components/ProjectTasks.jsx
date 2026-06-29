@@ -1,10 +1,12 @@
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { useDispatch } from "react-redux";
-import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { deleteTask, updateTask } from "../features/workspaceSlice";
-import { Bug, CalendarIcon, GitCommit, MessageSquare, Square, Trash, XIcon, Zap } from "lucide-react";
+import { Bug, CalendarIcon, GitCommit, MessageSquare, Square, Trash, XIcon, Zap, User } from "lucide-react";
+import { useAuth } from "@clerk/clerk-react";
+import api from "../configs/api";
 
 const typeIcons = {
     BUG: { icon: Bug, color: "text-red-600 dark:text-red-400" },
@@ -20,9 +22,35 @@ const priorityTexts = {
     HIGH: { background: "bg-emerald-100 dark:bg-emerald-950", prioritycolor: "text-emerald-600 dark:text-emerald-400" },
 };
 
-const ProjectTasks = ({ tasks }) => {
+const ProjectTasks = ({ tasks, members = [] }) => {
+    const { getToken } = useAuth();
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const highlightTaskId = searchParams.get("taskId");
+    const [activeHighlightTaskId, setActiveHighlightTaskId] = useState(null);
+    const highlightedRowRef = useRef(null);
+
+    useEffect(() => {
+        if (highlightTaskId && highlightedRowRef.current) {
+            // Delay slightly to allow layout and transitions to complete
+            const timer = setTimeout(() => {
+                highlightedRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [highlightTaskId]);
+
+    useEffect(() => {
+        if (highlightTaskId) {
+            setActiveHighlightTaskId(highlightTaskId);
+            const timer = setTimeout(() => {
+                setActiveHighlightTaskId(null);
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [highlightTaskId]);
+
     const [selectedTasks, setSelectedTasks] = useState([]);
 
     const [filters, setFilters] = useState({
@@ -58,8 +86,13 @@ const ProjectTasks = ({ tasks }) => {
         try {
             toast.loading("Updating status...");
 
-            //  Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            const token = await getToken();
+
+            await api.put(`/api/tasks/${taskId}`, { status: newStatus }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
 
             let updatedTask = structuredClone(tasks.find((t) => t.id === taskId));
             updatedTask.status = newStatus;
@@ -72,16 +105,46 @@ const ProjectTasks = ({ tasks }) => {
             toast.error(error?.response?.data?.message || error.message);
         }
     };
+    const handleAssigneeChange = async (taskId, newAssigneeId) => {
+        try {
+            toast.loading("Updating assignee...");
+            const token = await getToken();
+            
+            await api.put(`/api/tasks/${taskId}`, { assigneeId: newAssigneeId || null }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
 
+            const newMember = members.find((m) => m.user.id === newAssigneeId);
+            const newAssignee = newMember ? newMember.user : null;
+
+            let updatedTask = structuredClone(tasks.find((t) => t.id === taskId));
+            updatedTask.assigneeId = newAssigneeId || null;
+            updatedTask.assignee = newAssignee;
+            dispatch(updateTask(updatedTask));
+
+            toast.dismissAll();
+            toast.success("Task assignee updated successfully");
+        } catch (error) {
+            toast.dismissAll();
+            toast.error(error?.response?.data?.message || error.message);
+        }
+    };
     const handleDelete = async () => {
         try {
             const confirm = window.confirm("Are you sure you want to delete the selected tasks?");
             if (!confirm) return;
 
-            toast.loading("Deleting tasks...");
+            const token = await getToken();
 
-            //  Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            toast.loading("Deleting tasks")
+
+            await api.post("/api/tasks/delete", { taskIds: selectedTasks }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
 
             dispatch(deleteTask(selectedTasks));
 
@@ -173,7 +236,12 @@ const ProjectTasks = ({ tasks }) => {
                                         const { background, prioritycolor } = priorityTexts[task.priority] || {};
 
                                         return (
-                                            <tr key={task.id} onClick={() => navigate(`/taskDetails?projectId=${task.projectId}&taskId=${task.id}`)} className=" border-t border-zinc-300 dark:border-zinc-800 group hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all cursor-pointer" >
+                                            <tr 
+                                                key={task.id} 
+                                                ref={task.id === highlightTaskId ? highlightedRowRef : null}
+                                                onClick={() => navigate(`/taskDetails?projectId=${task.projectId}&taskId=${task.id}`)} 
+                                                className={`border-t border-zinc-300 dark:border-zinc-800 group hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all duration-1000 cursor-pointer ${task.id === activeHighlightTaskId ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/20" : ""}`} 
+                                            >
                                                 <td onClick={e => e.stopPropagation()} className="pl-2 pr-1">
                                                     <input type="checkbox" className="size-3 accent-zinc-600 dark:accent-zinc-500" onChange={() => selectedTasks.includes(task.id) ? setSelectedTasks(selectedTasks.filter((i) => i !== task.id)) : setSelectedTasks((prev) => [...prev, task.id])} checked={selectedTasks.includes(task.id)} />
                                                 </td>
@@ -196,11 +264,20 @@ const ProjectTasks = ({ tasks }) => {
                                                         <option value="DONE">Done</option>
                                                     </select>
                                                 </td>
-                                                <td className="px-4 py-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <img src={task.assignee?.image} className="size-5 rounded-full" alt="avatar" />
-                                                        {task.assignee?.name || "-"}
-                                                    </div>
+                                                <td onClick={e => e.stopPropagation()} className="px-4 py-2">
+                                                    <select 
+                                                        name="assignee" 
+                                                        onChange={(e) => handleAssigneeChange(task.id, e.target.value)} 
+                                                        value={task.assigneeId || ""} 
+                                                        className="group-hover:ring ring-zinc-100 outline-none px-2 pr-4 py-1 rounded text-sm text-zinc-900 dark:text-zinc-200 cursor-pointer"
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        {members.map((member) => (
+                                                            <option key={member.user.id} value={member.user.id}>
+                                                                {member.user.name || member.user.email}
+                                                            </option>
+                                                        ))}
+                                                    </select>
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <div className="flex items-center gap-1 text-zinc-600 dark:text-zinc-400">
@@ -230,7 +307,11 @@ const ProjectTasks = ({ tasks }) => {
                                 const { background, prioritycolor } = priorityTexts[task.priority] || {};
 
                                 return (
-                                    <div key={task.id} className=" dark:bg-gradient-to-br dark:from-zinc-800/70 dark:to-zinc-900/50 border border-zinc-300 dark:border-zinc-800 rounded-lg p-4 flex flex-col gap-2">
+                                    <div 
+                                        key={task.id} 
+                                        ref={task.id === highlightTaskId ? highlightedRowRef : null}
+                                        className={`dark:bg-gradient-to-br dark:from-zinc-800/70 dark:to-zinc-900/50 border border-zinc-300 dark:border-zinc-800 rounded-lg p-4 flex flex-col gap-2 transition-all duration-1000 ${task.id === activeHighlightTaskId ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-900/20 scale-[1.02]" : ""}`}
+                                    >
                                         <div className="flex items-center justify-between">
                                             <h3 className="text-zinc-900 dark:text-zinc-200 text-sm font-semibold">{task.title}</h3>
                                             <input type="checkbox" className="size-4 accent-zinc-600 dark:accent-zinc-500" onChange={() => selectedTasks.includes(task.id) ? setSelectedTasks(selectedTasks.filter((i) => i !== task.id)) : setSelectedTasks((prev) => [...prev, task.id])} checked={selectedTasks.includes(task.id)} />
@@ -256,9 +337,21 @@ const ProjectTasks = ({ tasks }) => {
                                             </select>
                                         </div>
 
-                                        <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                                            <img src={task.assignee?.image} className="size-5 rounded-full" alt="avatar" />
-                                            {task.assignee?.name || "-"}
+                                        <div>
+                                            <label className="text-zinc-600 dark:text-zinc-400 text-xs">Assignee</label>
+                                            <select 
+                                                name="assignee" 
+                                                onChange={(e) => handleAssigneeChange(task.id, e.target.value)} 
+                                                value={task.assigneeId || ""} 
+                                                className="w-full mt-1 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-300 dark:ring-zinc-700 outline-none px-2 py-1 rounded text-sm text-zinc-900 dark:text-zinc-200 cursor-pointer"
+                                            >
+                                                <option value="">Unassigned</option>
+                                                {members.map((member) => (
+                                                    <option key={member.user.id} value={member.user.id}>
+                                                        {member.user.name || member.user.email}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </div>
 
                                         <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">

@@ -48,7 +48,7 @@ export const getTaskComments = async (req, res) => {
        where: {taskId},
        include: {user: true}
     })
-    res.join({comments})
+    res.json({comments})
 
 
   } catch(error){

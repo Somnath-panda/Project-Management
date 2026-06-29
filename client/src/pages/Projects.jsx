@@ -3,11 +3,15 @@ import { useSelector } from "react-redux";
 import { Plus, Search, FolderOpen } from "lucide-react";
 import ProjectCard from "../components/ProjectCard";
 import CreateProjectDialog from "../components/CreateProjectDialog";
+import { useUser } from "@clerk/clerk-react";
 
 export default function Projects() {
     
-    const projects = useSelector(
-        (state) => state?.workspace?.currentWorkspace?.projects || []
+    const { user } = useUser();
+    const currentWorkspace = useSelector((state) => state?.workspace?.currentWorkspace || null);
+    const projects = currentWorkspace?.projects || [];
+    const isWorkspaceAdmin = currentWorkspace?.members?.some(
+        (m) => m.userId === user?.id && m.role === "ADMIN"
     );
 
     const [filteredProjects, setFilteredProjects] = useState([]);
@@ -54,9 +58,11 @@ export default function Projects() {
                     <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white mb-1"> Projects </h1>
                     <p className="text-gray-500 dark:text-zinc-400 text-sm"> Manage and track your projects </p>
                 </div>
-                <button onClick={() => setIsDialogOpen(true)} className="flex items-center px-5 py-2 text-sm rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:opacity-90 transition" >
-                    <Plus className="size-4 mr-2" /> New Project
-                </button>
+                {isWorkspaceAdmin && (
+                    <button onClick={() => setIsDialogOpen(true)} className="flex items-center px-5 py-2 text-sm rounded bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:opacity-90 transition" >
+                        <Plus className="size-4 mr-2" /> New Project
+                    </button>
+                )}
                 <CreateProjectDialog isDialogOpen={isDialogOpen} setIsDialogOpen={setIsDialogOpen} />
             </div>
 
@@ -92,13 +98,21 @@ export default function Projects() {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                             No projects found
                         </h3>
-                        <p className="text-gray-500 dark:text-zinc-400 mb-6 text-sm">
-                            Create your first project to get started
-                        </p>
-                        <button onClick={() => setIsDialogOpen(true)} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded mx-auto text-sm" >
-                            <Plus className="size-4" />
-                            Create Project
-                        </button>
+                        {isWorkspaceAdmin ? (
+                            <>
+                                <p className="text-gray-500 dark:text-zinc-400 mb-6 text-sm">
+                                    Create your first project to get started
+                                </p>
+                                <button onClick={() => setIsDialogOpen(true)} className="flex items-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded mx-auto text-sm" >
+                                    <Plus className="size-4" />
+                                    Create Project
+                                </button>
+                            </>
+                        ) : (
+                            <p className="text-gray-500 dark:text-zinc-400 text-sm">
+                                Contact a workspace administrator to set up projects.
+                            </p>
+                        )}
                     </div>
                 ) : (
                     filteredProjects.map((project) => (

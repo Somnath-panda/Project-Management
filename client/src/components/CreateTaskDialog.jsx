@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { format } from "date-fns";
+import { useAuth } from "@clerk/clerk-react";
+import api from "../configs/api";
+import toast from "react-hot-toast";
+import { addTask, fetchWorkspaces } from "../features/workspaceSlice";
 
 export default function CreateTaskDialog({ showCreateTask, setShowCreateTask, projectId }) {
+    const { getToken } = useAuth();
+    const dispatch = useDispatch();
+
+
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
     const project = currentWorkspace?.projects.find((p) => p.id === projectId);
     const teamMembers = project?.members || [];
@@ -21,8 +29,41 @@ export default function CreateTaskDialog({ showCreateTask, setShowCreateTask, pr
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setIsSubmitting(true);
+        try {
+            const token = await getToken();
+            const { data } = await api.post(
+                "/api/tasks", 
+                { 
+                    ...formData, 
+                    workspaceId: currentWorkspace.id || currentWorkspace._id, 
+                    projectId 
+                }, 
+                { 
+                    headers: { 
+                        Authorization: `Bearer ${token}` 
+                    } 
+                }
+            );
 
-
+            setShowCreateTask(false);
+            setFormData({
+                title: "",
+                description: "",
+                type: "TASK",
+                status: "TODO",
+                priority: "MEDIUM",
+                assigneeId: "",
+                due_date: ""
+            });
+            toast.success(data.message || "Task created successfully!");
+            dispatch(addTask(data.task));
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || error.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return showCreateTask ? (

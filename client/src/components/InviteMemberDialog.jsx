@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { Mail, UserPlus } from "lucide-react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { useAuth } from "@clerk/clerk-react";
+import api from "../configs/api";
+import { addWorkspaceMember } from "../features/workspaceSlice";
+import toast from "react-hot-toast";
 
 const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
-
+    const dispatch = useDispatch();
+    const { getToken } = useAuth();
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
@@ -13,7 +18,43 @@ const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!currentWorkspace) {
+            toast.error("No active workspace selected");
+            return;
+        }
 
+        setIsSubmitting(true);
+        try {
+            const token = await getToken();
+            const mappedRole = formData.role === "org:admin" ? "ADMIN" : "MEMBER";
+
+            const { data } = await api.post(
+                "/api/workspaces/add-member",
+                {
+                    email: formData.email,
+                    role: mappedRole,
+                    workspaceId: currentWorkspace.id || currentWorkspace._id,
+                    message: "Welcome to the workspace!",
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (data.member) {
+                dispatch(addWorkspaceMember(data.member));
+            }
+            toast.success(data.message || "Invitation email sent successfully!");
+            setFormData({ email: "", role: "org:member" });
+            setIsDialogOpen(false);
+        } catch (error) {
+            console.error(error);
+            toast.error(error.response?.data?.message || "Failed to add member");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (!isDialogOpen) return null;

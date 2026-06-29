@@ -60,6 +60,29 @@ const workspaceSlice = createSlice({
                 w.id === state.currentWorkspace.id ? { ...w, projects: w.projects.concat(action.payload) } : w
             );
         },
+        updateProject: (state, action) => {
+            state.currentWorkspace.projects = state.currentWorkspace.projects.map((p) =>
+                p.id === action.payload.id ? { ...p, ...action.payload } : p
+            );
+            // find workspace by id and update project in it
+            state.workspaces = state.workspaces.map((w) =>
+                w.id === state.currentWorkspace.id ? {
+                    ...w, projects: w.projects.map((p) =>
+                        p.id === action.payload.id ? { ...p, ...action.payload } : p
+                    )
+                } : w
+            );
+        },
+        addWorkspaceMember: (state, action) => {
+            if (state.currentWorkspace && state.currentWorkspace.id === action.payload.workspaceId) {
+                state.currentWorkspace.members.push(action.payload);
+            }
+            state.workspaces = state.workspaces.map((w) =>
+                w.id === action.payload.workspaceId
+                    ? { ...w, members: w.members.concat(action.payload) }
+                    : w
+            );
+        },
         addTask: (state, action) => {
 
             state.currentWorkspace.projects = state.currentWorkspace.projects.map((p) => {
@@ -147,5 +170,5 @@ const workspaceSlice = createSlice({
  });
   
 
-export const { setWorkspaces, setCurrentWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, addProject, addTask, updateTask, deleteTask } = workspaceSlice.actions;
+export const { setWorkspaces, setCurrentWorkspace, addWorkspace, updateWorkspace, deleteWorkspace, addProject, updateProject, addWorkspaceMember, addTask, updateTask, deleteTask } = workspaceSlice.actions;
 export default workspaceSlice.reducer;

@@ -5,7 +5,7 @@ import { inngest } from "../inngest/index.js";
 export const createTask = async (req, res) => {
   try {
     const { userId } = await req.auth();
-    const { projectId, title, description, type, status, proirity, assigneeId, due_date } = req.body;
+    const { projectId, title, description, type, status, priority, assigneeId, due_date } = req.body;
     const origin = req.get('origin')
 
     //Check if user has admin role for project
@@ -29,9 +29,10 @@ export const createTask = async (req, res) => {
         projectId,
         title,
         description,
-        proirity,
-        assigneeId,
+        priority,
+        assigneeId: assigneeId || null,
         status,
+        type,
         due_date: new Date(due_date)
       }
     })
@@ -41,12 +42,17 @@ export const createTask = async (req, res) => {
       include: { assignee: true }
     })
 
-    await inngest.send({
-      name: "app/task.assigned",
-      data: {
-        taskId: task.id, origin
-      }
-    })
+    try {
+      await inngest.send({
+        name: "app/task.assigned",
+        data: {
+          taskId: task.id, origin
+        }
+      });
+    } catch (inngestError) {
+      console.warn("Failed to send Inngest event:", inngestError.message);
+    }
+
     res.json({ task: taskWithAssignee, message: "Task created successfully" })
 
   } catch (error) {
@@ -81,11 +87,34 @@ export const updateTask = async (req, res) => {
       return res.status(403).json({ message: "You don't have admin privileges for this project" });
     }
 
+    const updateData = { ...req.body };
+    if (updateData.assigneeId === "") {
+      updateData.assigneeId = null;
+    }
+
     const updatedTask = await prisma.task.update({
       where: { id: req.params.id },
-      data: req.body
+      data: updateData,
+      include: { assignee: true }
     })
 
+    const assigneeChanged = 
+      updateData.assigneeId !== undefined && 
+      updateData.assigneeId !== task.assigneeId;
+
+    if (assigneeChanged && updateData.assigneeId) {
+      try {
+        const origin = req.get('origin');
+        await inngest.send({
+          name: "app/task.assigned",
+          data: {
+            taskId: updatedTask.id, origin
+          }
+        });
+      } catch (inngestError) {
+        console.warn("Failed to send Inngest event:", inngestError.message);
+      }
+    }
 
     res.json({ task: updatedTask, message: "Task updated successfully" })
 
