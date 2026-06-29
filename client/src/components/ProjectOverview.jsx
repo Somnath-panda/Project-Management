@@ -4,6 +4,7 @@ import { ArrowRight, Calendar, UsersIcon, FolderOpen } from "lucide-react";
 import { format } from "date-fns";
 import { useSelector } from "react-redux";
 import CreateProjectDialog from "./CreateProjectDialog";
+import { useUser } from "@clerk/clerk-react";
 
 const ProjectOverview = () => {
     const statusColors = {
@@ -20,9 +21,14 @@ const ProjectOverview = () => {
         HIGH: "border-green-300 text-green-700 dark:border-green-500 dark:text-green-400",
     };
 
+    const { user } = useUser();
     const currentWorkspace = useSelector((state) => state?.workspace?.currentWorkspace || null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [projects, setProjects] = useState([]);
+
+    const isWorkspaceAdmin = currentWorkspace?.members?.some(
+        (m) => m.userId === user?.id && m.role === "ADMIN"
+    );
 
     useEffect(() => {
         setProjects(currentWorkspace?.projects || []);
@@ -44,10 +50,18 @@ const ProjectOverview = () => {
                             <FolderOpen size={32} />
                         </div>
                         <p className="text-zinc-600 dark:text-zinc-400">No projects yet</p>
-                        <button onClick={() => setIsDialogOpen(true)} className="mt-4 px-4 py-2 text-sm bg-gradient-to-br from-blue-500 to-blue-600 text-white dark:text-zinc-200 rounded hover:opacity-90 transition">
-                            Create your First Project
-                        </button>
-                        <CreateProjectDialog isDialogOpen={isDialogOpen} setIsDialogOpen={setIsDialogOpen} />
+                        {isWorkspaceAdmin ? (
+                            <>
+                                <button onClick={() => setIsDialogOpen(true)} className="mt-4 px-4 py-2 text-sm bg-gradient-to-br from-blue-500 to-blue-600 text-white dark:text-zinc-200 rounded hover:opacity-90 transition">
+                                    Create your First Project
+                                </button>
+                                <CreateProjectDialog isDialogOpen={isDialogOpen} setIsDialogOpen={setIsDialogOpen} />
+                            </>
+                        ) : (
+                            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
+                                Contact a workspace administrator to set up projects.
+                            </p>
+                        )}
                     </div>
                 ) : (
                     <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
