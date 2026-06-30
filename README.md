@@ -2,7 +2,10 @@
 
 A fast, and modern project management platform designed for collaborative teams to organize workspaces, assign tasks, schedule items visually on a drag-and-drop calendar, and streamline daily productivity.
 
+🔗 **Live Demo:** [https://project-mgt-rose-one.vercel.app/](https://project-mgt-rose-one.vercel.app/)
+
 ---
+
 
 ## ⭐ Main Features
 
